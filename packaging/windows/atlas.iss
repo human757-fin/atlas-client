@@ -12,7 +12,7 @@ DefaultDirName={localappdata}\Programs\Atlas
 DefaultGroupName=Atlas
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-OutputDir=dist\windows
+OutputDir=..\..\dist\windows
 OutputBaseFilename=atlas-client-windows-x86_64-setup
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
@@ -32,8 +32,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 
 [Files]
-Source: "dist\windows\atlas-client.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\windows\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\windows\atlas-client.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\windows\uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Atlas"; Filename: "{app}\atlas-client.exe"; WorkingDir: "{app}"
