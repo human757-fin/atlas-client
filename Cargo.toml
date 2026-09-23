@@ -1,0 +1,21 @@
+[package]
+name = "atlas-client"
+version = "0.1.0"
+edition = "2024"
+description = "A performance-focused Minecraft launcher for Linux and Windows"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+egui = "0.31"
+mc-launcher-core = { path = "vendor-mc-launcher-core" }
+dirs = "6"
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls"], default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.11"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

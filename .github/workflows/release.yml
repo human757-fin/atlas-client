@@ -1,0 +1,89 @@
+name: Build and publish releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: Linux installer archive
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev \
+            libegl1-mesa-dev \
+            libgl1-mesa-dev \
+            libgtk-3-dev \
+            libudev-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            pkg-config
+      - name: Build Atlas
+        run: cargo build --release --locked
+      - name: Package Linux release
+        run: |
+          mkdir -p dist/linux
+          cp target/release/atlas-client dist/linux/atlas-client
+          cp packaging/linux/install.sh packaging/linux/uninstall.sh dist/linux/
+          cp README.md dist/linux/README.md
+          tar -czf atlas-client-linux-x86_64.tar.gz -C dist/linux .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: atlas-client-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows installer archive
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Atlas
+        run: cargo build --release --locked
+      - name: Package Windows release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/windows | Out-Null
+          Copy-Item target/release/atlas-client.exe dist/windows/atlas-client.exe
+          Copy-Item -Path @('packaging/windows/install.ps1', 'packaging/windows/uninstall.ps1', 'README.md') -Destination dist/windows/
+          Compress-Archive -Path dist/windows/* -DestinationPath atlas-client-windows-x86_64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: atlas-client-windows-x86_64.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release'
+          merge-multiple: true
+          path: release-assets
+      - name: Create release and upload installers
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Atlas ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*
