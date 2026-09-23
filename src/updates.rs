@@ -37,11 +37,28 @@ fn get(client: &reqwest::blocking::Client, url: &str) -> Result<Vec<u8>, String>
     client.get(url).send().map_err(|e| e.to_string())?.error_for_status().map_err(|e| e.to_string())?.bytes().map(|b| b.to_vec()).map_err(|e| e.to_string())
 }
 
+fn get_with_progress(client: &reqwest::blocking::Client, url: &str, mut progress: impl FnMut(u64, u64)) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut response = client.get(url).send().map_err(|e| e.to_string())?.error_for_status().map_err(|e| e.to_string())?;
+    let total = response.content_length().unwrap_or(0);
+    let mut bytes = Vec::with_capacity(total.min(32 * 1024 * 1024) as usize);
+    let mut chunk = [0_u8; 64 * 1024];
+    let mut downloaded = 0_u64;
+    loop {
+        let count = response.read(&mut chunk).map_err(|e| e.to_string())?;
+        if count == 0 { break; }
+        bytes.extend_from_slice(&chunk[..count]);
+        downloaded += count as u64;
+        progress(downloaded, total);
+    }
+    Ok(bytes)
+}
+
 fn asset<'a>(release: &'a Release, name: &str) -> Result<&'a Asset, String> {
     release.assets.iter().find(|a| a.name == name).ok_or_else(|| format!("Release {} is missing {name}", release.tag))
 }
 
-pub fn install(release: &Release) -> Result<String, String> {
+pub fn install(release: &Release, mut progress: impl FnMut(u64, u64)) -> Result<String, String> {
     let client = reqwest::blocking::Client::builder().user_agent("AtlasClient-Updater").build().map_err(|e| e.to_string())?;
     let sums_asset = asset(release, "SHA256SUMS")?;
     let sums = String::from_utf8(get(&client, &sums_asset.browser_download_url)?).map_err(|e| e.to_string())?;
@@ -50,7 +67,7 @@ pub fn install(release: &Release) -> Result<String, String> {
     #[cfg(target_os = "linux")]
     let filename = "atlas-client-linux-x86_64.tar.gz";
     let expected = sums.lines().find_map(|line| { let mut p = line.split_whitespace(); let hash = p.next()?; let file = p.next()?.trim_start_matches('*'); (file == filename).then(|| hash.to_ascii_lowercase()) }).ok_or_else(|| format!("No checksum found for {filename}"))?;
-    let bytes = get(&client, &asset(release, filename)?.browser_download_url)?;
+    let bytes = get_with_progress(&client, &asset(release, filename)?.browser_download_url, &mut progress)?;
     let actual = Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect::<String>();
     if actual != expected { return Err("The downloaded update failed its SHA-256 check.".into()); }
     let temp = std::env::temp_dir().join("atlas-update");

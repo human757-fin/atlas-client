@@ -20,7 +20,7 @@ const LIME: Color32 = Color32::from_rgb(156, 171, 134);
 enum Page { Home, Performance, Versions, Mods }
 
 enum WorkerMessage { Progress(String), Complete(Result<String, String>) }
-enum UpdateWorker { Check(Result<Option<updates::Release>, String>), Installed(Result<String, String>) }
+enum UpdateWorker { Check(Result<Option<updates::Release>, String>), Progress(u64, u64), Installed(Result<String, String>) }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
 struct UserPreferences {
@@ -57,6 +57,8 @@ struct AtlasApp {
     update: Option<updates::Release>,
     update_message: String,
     update_busy: bool,
+    update_downloaded: u64,
+    update_total: u64,
 }
 
 impl AtlasApp {
@@ -86,6 +88,8 @@ impl AtlasApp {
             update: None,
             update_message: "Checking for updates…".into(),
             update_busy: false,
+            update_downloaded: 0,
+            update_total: 0,
         };
         app.check_updates();
         if app.catalog.versions.is_empty() { app.refresh_versions(); }
@@ -127,6 +131,7 @@ impl AtlasApp {
                 { self.update_message = _message; self.update_busy = false; self.update = None; self.update_rx = None; ctx.request_repaint(); }
             }
             Ok(UpdateWorker::Installed(Err(error))) => { self.update_message = format!("Update failed: {error}"); self.update_busy = false; self.update_rx = None; ctx.request_repaint(); }
+            Ok(UpdateWorker::Progress(downloaded, total)) => { self.update_downloaded = downloaded; self.update_total = total; ctx.request_repaint(); }
             Err(mpsc::TryRecvError::Disconnected) => { self.update_message = "Update check stopped unexpectedly.".into(); self.update_rx = None; }
             Err(mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
         }
@@ -136,15 +141,22 @@ impl AtlasApp {
         let Some(release) = self.update.clone() else { self.check_updates(); return; };
         if self.update_busy { return; }
         self.update_busy = true;
+        self.update_downloaded = 0;
+        self.update_total = 0;
         self.update_message = format!("Downloading and verifying Atlas {}…", release.version);
         let (tx, rx) = mpsc::channel();
         self.update_rx = Some(rx);
-        std::thread::spawn(move || { let _ = tx.send(UpdateWorker::Installed(updates::install(&release))); });
+        std::thread::spawn(move || {
+            let sender = tx.clone();
+            let result = updates::install(&release, move |downloaded, total| { let _ = sender.send(UpdateWorker::Progress(downloaded, total)); });
+            let _ = tx.send(UpdateWorker::Installed(result));
+        });
     }
 
     fn update_panel(&mut self, ui: &mut egui::Ui) {
         Self::panel(ui, |ui| {
             ui.horizontal(|ui| {
+                if self.update_busy { self.download_map(ui); }
                 ui.vertical(|ui| {
                     ui.label(RichText::new("ATLAS UPDATES").size(12.0).color(LIME).monospace());
                     ui.add_space(8.0);
@@ -157,8 +169,45 @@ impl AtlasApp {
                     } else if !self.update_busy && self.update_rx.is_none() && ui.add(egui::Button::new(RichText::new("CHECK AGAIN").color(LIME)).corner_radius(8)).clicked() { self.check_updates(); }
                 });
             });
-            if self.update_busy { ui.add_space(12.0); ui.add(egui::ProgressBar::new(0.45).animate(true).text("Downloading and verifying release")); }
+            if self.update_busy {
+                ui.add_space(8.0);
+                let downloaded = self.update_downloaded as f64 / (1024.0 * 1024.0);
+                if self.update_total > 0 {
+                    let total = self.update_total as f64 / (1024.0 * 1024.0);
+                    ui.label(RichText::new(format!("{downloaded:.1} MB of {total:.1} MB downloaded · checksum verification follows")).size(12.0).color(MUTED));
+                } else {
+                    ui.label(RichText::new(format!("{downloaded:.1} MB downloaded · preparing checksum verification")).size(12.0).color(MUTED));
+                }
+            }
         });
+    }
+
+    fn download_map(&self, ui: &mut egui::Ui) {
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(112.0, 88.0), egui::Sense::hover());
+        let painter = ui.painter();
+        let ratio = if self.update_total == 0 { 0.0 } else { (self.update_downloaded as f32 / self.update_total as f32).clamp(0.0, 1.0) };
+        let filled = (ratio * 16.0).floor() as usize;
+        for row in 0..4 {
+            for column in 0..4 {
+                let index = row * 4 + column;
+                let x = rect.center().x + (column as f32 - row as f32) * 12.0;
+                let y = rect.top() + 14.0 + (column as f32 + row as f32) * 7.0;
+                let top = egui::Pos2::new(x, y - 6.0);
+                let right = egui::Pos2::new(x + 11.0, y);
+                let bottom = egui::Pos2::new(x, y + 6.0);
+                let left = egui::Pos2::new(x - 11.0, y);
+                let completed = index < filled;
+                let active = index == filled && ratio < 1.0;
+                let top_color = if completed { Color32::from_rgb(126, 143, 105) } else if active { Color32::from_rgb(78, 89, 66) } else { Color32::from_rgb(37, 39, 36) };
+                let side_color = if completed { Color32::from_rgb(84, 98, 69) } else if active { Color32::from_rgb(52, 60, 45) } else { Color32::from_rgb(29, 31, 29) };
+                let depth = 4.0;
+                painter.add(egui::Shape::convex_polygon(vec![right, bottom, bottom + Vec2::new(0.0, depth), right + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0, LINE)));
+                painter.add(egui::Shape::convex_polygon(vec![left, bottom, bottom + Vec2::new(0.0, depth), left + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0, LINE)));
+                painter.add(egui::Shape::convex_polygon(vec![top, right, bottom, left], top_color, Stroke::new(1.0, if active { LIME } else { LINE })));
+            }
+        }
+        let percent = (ratio * 100.0).round() as u32;
+        painter.text(rect.center() + Vec2::new(0.0, 37.0), egui::Align2::CENTER_CENTER, format!("{percent}%  ·  WORLD DATA"), FontId::monospace(9.0), MUTED);
     }
 
     fn poll_versions(&mut self, ctx: &egui::Context) {
