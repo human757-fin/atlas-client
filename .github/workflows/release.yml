@@ -85,5 +85,9 @@ jobs:
         with:
           name: Atlas ${{ github.ref_name }}
           generate_release_notes: true
+          body: |
+            Atlas is an early preview. Version and Fabric setup, mod selection, and cross-platform packaging are included.
+
+            Microsoft sign-in, Java runtime setup, and launching Minecraft are still in development.
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: release-assets/*
