@@ -19,11 +19,15 @@ Install Rust and the platform graphics development dependencies required by `efr
 cargo run
 ```
 
-## Install a release
+## Install and update
 
-- **Linux:** Download and extract `atlas-client-linux-x86_64.tar.gz`, then run `./install.sh`. Atlas appears in your applications menu. To remove it, run `~/.local/opt/atlas-client/uninstall.sh`.
-- **Windows:** Download and extract `atlas-client-windows-x86_64.zip`, then run `install.ps1` from PowerShell. Atlas appears in the Start Menu under **Atlas**. To remove it, run `uninstall.ps1` from the installed folder at `%LOCALAPPDATA%\Programs\Atlas`.
+- **Windows setup:** Download `atlas-client-windows-x86_64-setup.exe`. The dark Atlas setup wizard installs per-user, adds an Atlas Start Menu shortcut, and offers an optional desktop shortcut. Uninstall Atlas from Windows Settings.
+- **Windows portable:** Download and extract `atlas-client-windows-x86_64.zip`, then run `atlas-client.exe` from that folder.
+- **Linux online installer:** Download `atlas-client-linux-install.sh` and run `sh atlas-client-linux-install.sh`. It fetches the latest Linux package from GitHub, verifies its SHA-256 checksum, and adds Atlas to your applications menu. `curl`, Python 3, and `sha256sum` are required.
+- **Linux portable:** Download and extract `atlas-client-linux-x86_64.tar.gz`, then run `./atlas-client` or `./install.sh` to add it to your applications menu.
 
-Releases are built for x86-64 Linux and Windows. Pushing a version tag such as `v0.1.0` builds both release archives and publishes them on the repository's GitHub Releases page.
+Atlas checks GitHub Releases when it starts. When a newer release is available, the Overview page shows its version and release notes with an **Update Atlas** button. The app verifies the downloaded package before handing off to the Windows setup wizard or replacing and restarting the Linux executable. Portable Windows copies update in place when their folder is writable.
+
+Releases are built for x86-64 Linux and Windows. Pushing a version tag such as `v0.1.0` builds separate setup and portable packages and publishes SHA-256 checksums alongside them.
 
 Version installation, Fabric profile setup, mod selection, and mod download are wired up. Authenticated launch and Java runtime selection are the next launcher milestones. Atlas will require Microsoft sign-in before it can launch, and its registered client ID is awaiting approval for Minecraft Services.

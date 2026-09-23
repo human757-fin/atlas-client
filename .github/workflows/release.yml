@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   linux:
-    name: Linux installer archive
+    name: Linux installer and portable build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -42,14 +42,17 @@ jobs:
           cp packaging/linux/install.sh packaging/linux/uninstall.sh dist/linux/
           cp README.md dist/linux/README.md
           tar -czf atlas-client-linux-x86_64.tar.gz -C dist/linux .
+          cp packaging/linux/online-install.sh atlas-client-linux-install.sh
       - uses: actions/upload-artifact@v7
         with:
           name: linux-release
-          path: atlas-client-linux-x86_64.tar.gz
+          path: |
+            atlas-client-linux-x86_64.tar.gz
+            atlas-client-linux-install.sh
           if-no-files-found: error
 
   windows:
-    name: Windows installer archive
+    name: Windows setup and portable build
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v7
@@ -60,14 +63,22 @@ jobs:
       - name: Package Windows release
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist/windows | Out-Null
+          New-Item -ItemType Directory -Force -Path dist/windows, dist/portable | Out-Null
           Copy-Item target/release/atlas-client.exe dist/windows/atlas-client.exe
-          Copy-Item -Path @('packaging/windows/install.ps1', 'packaging/windows/uninstall.ps1', 'README.md') -Destination dist/windows/
-          Compress-Archive -Path dist/windows/* -DestinationPath atlas-client-windows-x86_64.zip -Force
+          Copy-Item target/release/atlas-client.exe dist/portable/atlas-client.exe
+          Copy-Item packaging/windows/uninstall.ps1 dist/windows/uninstall.ps1
+          Copy-Item README.md dist/portable/README.md
+          Compress-Archive -Path dist/portable/* -DestinationPath atlas-client-windows-x86_64.zip -Force
+          choco install innosetup --yes --no-progress
+          $env:ATLAS_VERSION = "${{ github.ref_name }}".TrimStart('v')
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Datlas .\packaging\windows\atlas.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler exited with $LASTEXITCODE" }
       - uses: actions/upload-artifact@v7
         with:
           name: windows-release
-          path: atlas-client-windows-x86_64.zip
+          path: |
+            atlas-client-windows-x86_64.zip
+            dist/windows/atlas-client-windows-x86_64-setup.exe
           if-no-files-found: error
 
   publish:
@@ -81,13 +92,20 @@ jobs:
           merge-multiple: true
           path: release-assets
       - name: Create release and upload installers
+        run: |
+          cd release-assets
+          sha256sum atlas-client-linux-x86_64.tar.gz atlas-client-windows-x86_64.zip atlas-client-windows-x86_64-setup.exe > SHA256SUMS
+          cd ..
+        shell: bash
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           name: Atlas ${{ github.ref_name }}
           generate_release_notes: true
           body: |
-            Atlas is an early preview. Version and Fabric setup, mod selection, and cross-platform packaging are included.
+            Atlas is an early preview. Includes installable and portable downloads for Windows and Linux. Windows setup adds a Start Menu shortcut and supports in-app updates. Linux includes an online installer and portable archive.
 
             Microsoft sign-in, Java runtime setup, and launching Minecraft are still in development.
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: release-assets/*
+          files: |
+            release-assets/*

@@ -143,16 +143,19 @@ dependencies = [
 
 [[package]]
 name = "atlas-client"
-version = "0.1.0-preview.1"
+version = "0.1.0-preview.2"
 dependencies = [
  "dirs",
  "eframe",
  "egui",
  "mc-launcher-core",
  "reqwest 0.12.28",
+ "semver",
  "serde",
  "serde_json",
  "sha1 0.11.0",
+ "sha2",
+ "zip",
 ]
 
 [[package]]

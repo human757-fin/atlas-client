@@ -1,5 +1,6 @@
 mod versions;
 mod mods;
+mod updates;
 
 use eframe::egui::{self, Align, Color32, FontId, Layout, RichText, Stroke, Vec2};
 use mc_launcher_core::prelude::{InstallRequest, JavaInstallPolicy, Launcher, LoaderSpec, LoaderVersion};
@@ -19,6 +20,7 @@ const LIME: Color32 = Color32::from_rgb(156, 171, 134);
 enum Page { Home, Performance, Versions, Mods }
 
 enum WorkerMessage { Progress(String), Complete(Result<String, String>) }
+enum UpdateWorker { Check(Result<Option<updates::Release>, String>), Installed(Result<String, String>) }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
 struct UserPreferences {
@@ -51,6 +53,10 @@ struct AtlasApp {
     operation_message: String,
     selected_mods: HashSet<&'static str>,
     installed_mods: HashSet<String>,
+    update_rx: Option<Receiver<UpdateWorker>>,
+    update: Option<updates::Release>,
+    update_message: String,
+    update_busy: bool,
 }
 
 impl AtlasApp {
@@ -76,7 +82,12 @@ impl AtlasApp {
             operation_message: String::new(),
             selected_mods: ["sodium", "lithium", "ferrite-core", "modmenu", "appleskin", "zoomify"].into_iter().collect(),
             installed_mods: HashSet::new(),
+            update_rx: None,
+            update: None,
+            update_message: "Checking for updates…".into(),
+            update_busy: false,
         };
+        app.check_updates();
         if app.catalog.versions.is_empty() { app.refresh_versions(); }
         app
     }
@@ -90,6 +101,63 @@ impl AtlasApp {
         std::thread::spawn(move || {
             let result = VersionCatalog::fetch().map(|catalog| catalog.versions).map_err(|e| e.to_string());
             let _ = tx.send(result);
+        });
+    }
+
+    fn check_updates(&mut self) {
+        if self.update_rx.is_some() { return; }
+        let (tx, rx) = mpsc::channel();
+        self.update_rx = Some(rx);
+        self.update_message = "Checking GitHub for the latest Atlas release…".into();
+        std::thread::spawn(move || { let _ = tx.send(UpdateWorker::Check(updates::check())); });
+    }
+
+    fn poll_updates(&mut self, ctx: &egui::Context) {
+        let Some(rx) = &self.update_rx else { return; };
+        match rx.try_recv() {
+            Ok(UpdateWorker::Check(Ok(Some(release)))) => { self.update_message = format!("Atlas {} is ready to install.", release.version); self.update = Some(release); self.update_rx = None; ctx.request_repaint(); }
+            Ok(UpdateWorker::Check(Ok(None))) => { self.update_message = format!("Atlas {} is up to date.", env!("CARGO_PKG_VERSION")); self.update_rx = None; ctx.request_repaint(); }
+            Ok(UpdateWorker::Check(Err(error))) => { self.update_message = format!("Update check failed: {error}"); self.update_rx = None; ctx.request_repaint(); }
+            Ok(UpdateWorker::Installed(Ok(_message))) => {
+                #[cfg(target_os = "windows")]
+                std::process::exit(0);
+                #[cfg(target_os = "linux")]
+                std::process::exit(0);
+                #[allow(unreachable_code)]
+                { self.update_message = _message; self.update_busy = false; self.update = None; self.update_rx = None; ctx.request_repaint(); }
+            }
+            Ok(UpdateWorker::Installed(Err(error))) => { self.update_message = format!("Update failed: {error}"); self.update_busy = false; self.update_rx = None; ctx.request_repaint(); }
+            Err(mpsc::TryRecvError::Disconnected) => { self.update_message = "Update check stopped unexpectedly.".into(); self.update_rx = None; }
+            Err(mpsc::TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(200)),
+        }
+    }
+
+    fn start_update(&mut self) {
+        let Some(release) = self.update.clone() else { self.check_updates(); return; };
+        if self.update_busy { return; }
+        self.update_busy = true;
+        self.update_message = format!("Downloading and verifying Atlas {}…", release.version);
+        let (tx, rx) = mpsc::channel();
+        self.update_rx = Some(rx);
+        std::thread::spawn(move || { let _ = tx.send(UpdateWorker::Installed(updates::install(&release))); });
+    }
+
+    fn update_panel(&mut self, ui: &mut egui::Ui) {
+        Self::panel(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("ATLAS UPDATES").size(12.0).color(LIME).monospace());
+                    ui.add_space(8.0);
+                    ui.label(RichText::new(&self.update_message).size(16.0).strong().color(TEXT));
+                    if let Some(release) = &self.update { if !release.notes.trim().is_empty() { ui.add_space(8.0); ui.label(RichText::new(release.notes.lines().take(3).collect::<Vec<_>>().join("  •  ")).size(16.0).color(MUTED)); } }
+                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if self.update.is_some() && !self.update_busy {
+                        if ui.add_sized([152.0, 40.0], egui::Button::new(RichText::new("UPDATE ATLAS").strong().color(Color32::from_rgb(22, 25, 19))).fill(LIME).corner_radius(8)).clicked() { self.start_update(); }
+                    } else if !self.update_busy && self.update_rx.is_none() && ui.add(egui::Button::new(RichText::new("CHECK AGAIN").color(LIME)).corner_radius(8)).clicked() { self.check_updates(); }
+                });
+            });
+            if self.update_busy { ui.add_space(12.0); ui.add(egui::ProgressBar::new(0.45).animate(true).text("Downloading and verifying release")); }
         });
     }
 
@@ -222,6 +290,8 @@ impl AtlasApp {
                 ui.label(RichText::new("A lighter Minecraft setup with useful performance controls, built around your version and your hardware.").size(16.0).color(MUTED));
             });
         });
+        ui.add_space(16.0);
+        self.update_panel(ui);
         ui.add_space(16.0);
         ui.columns(2, |columns| {
             Self::panel(&mut columns[0], |ui| {
@@ -416,6 +486,7 @@ impl eframe::App for AtlasApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_versions(ctx);
         self.poll_operation(ctx);
+        self.poll_updates(ctx);
         egui::SidePanel::left("sidebar").exact_width(224.0).frame(egui::Frame::new().fill(Color32::from_rgb(12, 12, 12)).inner_margin(16)).show(ctx, |ui| {
             ui.add_space(16.0);
             ui.horizontal(|ui| { ui.label(RichText::new("▦").size(22.0).strong().color(LIME)); ui.label(RichText::new("atlas").size(22.0).strong().color(TEXT)); ui.label(RichText::new(".").size(22.0).strong().color(LIME)); });
