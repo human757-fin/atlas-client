@@ -1,6 +1,6 @@
 [package]
 name = "atlas-client"
-version = "0.1.0-preview.4"
+version = "0.1.0-preview.5"
 edition = "2024"
 description = "A performance-focused Minecraft launcher for Linux and Windows"
 license = "MIT"

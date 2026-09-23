@@ -73,12 +73,13 @@ jobs:
           $env:ATLAS_VERSION = "${{ github.ref_name }}".TrimStart('v')
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Datlas .\packaging\windows\atlas.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler exited with $LASTEXITCODE" }
+          Copy-Item dist/windows/atlas-client-windows-x86_64-setup.exe .\atlas-client-windows-x86_64-setup.exe
       - uses: actions/upload-artifact@v7
         with:
           name: windows-release
           path: |
             atlas-client-windows-x86_64.zip
-            dist/windows/atlas-client-windows-x86_64-setup.exe
+            atlas-client-windows-x86_64-setup.exe
           if-no-files-found: error
 
   publish:
