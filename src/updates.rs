@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{fs, process::Command};
+#[cfg(target_os = "windows")]
+use std::path::PathBuf;
 
 const API: &str = "https://api.github.com/repos/human757-fin/atlas-client/releases?per_page=20";
 
@@ -75,7 +77,7 @@ pub fn install(release: &Release, mut progress: impl FnMut(u64, u64)) -> Result<
     #[cfg(target_os = "windows")]
     {
         let file = temp.join(filename);
-        fs::write(&file, bytes).map_err(|e| e.to_string())?;
+        fs::write(&file, &bytes).map_err(|e| e.to_string())?;
         if filename.ends_with(".exe") {
             Command::new(file).args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]).spawn().map_err(|e| e.to_string())?;
             return Ok("Setup is ready. Atlas will close while the update is installed, then reopen.".into());

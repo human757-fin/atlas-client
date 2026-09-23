@@ -201,9 +201,9 @@ impl AtlasApp {
                 let top_color = if completed { Color32::from_rgb(126, 143, 105) } else if active { Color32::from_rgb(78, 89, 66) } else { Color32::from_rgb(37, 39, 36) };
                 let side_color = if completed { Color32::from_rgb(84, 98, 69) } else if active { Color32::from_rgb(52, 60, 45) } else { Color32::from_rgb(29, 31, 29) };
                 let depth = 4.0;
-                painter.add(egui::Shape::convex_polygon(vec![right, bottom, bottom + Vec2::new(0.0, depth), right + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0, LINE)));
-                painter.add(egui::Shape::convex_polygon(vec![left, bottom, bottom + Vec2::new(0.0, depth), left + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0, LINE)));
-                painter.add(egui::Shape::convex_polygon(vec![top, right, bottom, left], top_color, Stroke::new(1.0, if active { LIME } else { LINE })));
+                painter.add(egui::Shape::convex_polygon(vec![right, bottom, bottom + Vec2::new(0.0, depth), right + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0_f32, LINE)));
+                painter.add(egui::Shape::convex_polygon(vec![left, bottom, bottom + Vec2::new(0.0, depth), left + Vec2::new(0.0, depth)], side_color, Stroke::new(1.0_f32, LINE)));
+                painter.add(egui::Shape::convex_polygon(vec![top, right, bottom, left], top_color, Stroke::new(1.0_f32, if active { LIME } else { LINE })));
             }
         }
         let percent = (ratio * 100.0).round() as u32;
@@ -323,13 +323,13 @@ impl AtlasApp {
     }
 
     fn panel<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
-        egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, LINE)).corner_radius(8).inner_margin(16).show(ui, add).inner
+        egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0_f32, LINE)).corner_radius(8).inner_margin(16).show(ui, add).inner
     }
 
     fn home(&mut self, ui: &mut egui::Ui) {
         self.header(ui, "Your game, your rules", "Your next world awaits.", "A faster, cleaner Minecraft experience starts right here.");
         let version_ids: Vec<String> = self.catalog.all_versions().map(|version| version.id.clone()).collect();
-        egui::Frame::new().fill(Color32::from_rgb(29, 31, 27)).stroke(Stroke::new(1.0, LINE)).corner_radius(8).inner_margin(24).show(ui, |ui| {
+        egui::Frame::new().fill(Color32::from_rgb(29, 31, 27)).stroke(Stroke::new(1.0_f32, LINE)).corner_radius(8).inner_margin(24).show(ui, |ui| {
             ui.set_min_height(160.0);
             ui.vertical(|ui| {
                 ui.label(RichText::new("●  BUILT FOR THE WAY YOU PLAY").size(12.0).color(LIME).monospace());
@@ -404,7 +404,7 @@ impl AtlasApp {
             });
         });
         ui.add_space(16.0);
-        egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, LINE)).corner_radius(8).inner_margin(16).show(ui, |ui| { ui.label(RichText::new("About performance mods").size(16.0).strong().color(LIME)); ui.add_space(8.0); ui.label(RichText::new("Choose individual Fabric performance mods from the Mods page. Atlas checks the selected Minecraft version and installs required dependencies with each mod.").size(16.0).color(MUTED)); });
+        egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0_f32, LINE)).corner_radius(8).inner_margin(16).show(ui, |ui| { ui.label(RichText::new("About performance mods").size(16.0).strong().color(LIME)); ui.add_space(8.0); ui.label(RichText::new("Choose individual Fabric performance mods from the Mods page. Atlas checks the selected Minecraft version and installs required dependencies with each mod.").size(16.0).color(MUTED)); });
     }
 
     fn versions(&mut self, ui: &mut egui::Ui) {
@@ -584,10 +584,10 @@ fn set_theme(ctx: &egui::Context) {
     style.visuals.widgets.inactive.fg_stroke.color = TEXT;
     style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(43, 43, 43);
     style.visuals.selection.bg_fill = Color32::from_rgb(67, 75, 59);
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, LINE);
-    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, LINE);
-    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, MUTED);
-    style.visuals.widgets.active.bg_stroke = Stroke::new(1.0, LIME);
+    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, LINE);
+    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, LINE);
+    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, MUTED);
+    style.visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, LIME);
     style.visuals.widgets.inactive.corner_radius = 4.into();
     style.visuals.widgets.hovered.corner_radius = 8.into();
     style.visuals.widgets.active.corner_radius = 8.into();
